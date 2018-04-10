@@ -11,19 +11,21 @@ Code & 3D models for a simple hand controlled RGB desktop lamp
 
 - 3D printed part
     - .blend & .stl provided
-- Few wires
+- ~ 10 small wires
     - soldering iron + tin
 - Wemos D1 mini (default platformio.ini config)
     - or any Arduino compatible microcontroller with 5v pin
 
-## Need pins
+## Needed pins
 
 - 5v source
 - 3v source
 - interrupt
 - GND
-- 1 wire (for RGB leds, pin13 by default)
-- I2C (SDA & SCL, for the gesture sensor)
+- 1 wire (for RGB leds, pin 13 by default)
+- I2C (for the gesture sensor)
+    - SDA
+    - SCL
 
 
 ## Bugs and limitations
