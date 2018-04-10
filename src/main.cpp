@@ -37,18 +37,13 @@ bool is_dirty = false;
 
 double brightness = 0.5;
 double hue = 0.0;
+double saturation = 1.0;
 
 // breakboards objects
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(12, 14, NEO_GRB + NEO_KHZ800); // 12 leds, pin 13
 
-// set one color for all strips
-void colorWipe(uint32_t c) {
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, c);
-    }
-    strip.show();
-}
+#define paint(c) { for(uint16_t i=0; i<strip.numPixels(); i++) { strip.setPixelColor(i, c); } strip.show(); };
 
 void setup() {
     Serial.begin(115200);
@@ -66,7 +61,7 @@ void setup() {
     apds.setProximityInterruptThreshold(0, PRESS_FORCE/4);
     apds.enableProximityInterrupt();
 
-    colorWipe(DEFAULT_COLOR);
+    paint(DEFAULT_COLOR);
     Serial.println("Hello Anna!!");
 }
 
@@ -75,24 +70,23 @@ void loop() {
     double dt = fmod((millis()/(1000.0/(long_press+1))), 360.0);
 
     switch(loop_mode) {
-        case 0:
-            // white light intensity
-            if (is_dirty) colorWipe(RGB2Color(hsv2rgb({0, 0, long_press/MAX_PRESSTIME})));
+        case 0: // white light (variable intensity)
+            if (is_dirty) paint(RGB2Color(hsv2rgb({0, 0, long_press/MAX_PRESSTIME})));
             break;
-        case 1:
-            if (is_dirty) colorWipe( RGB2Color(hsv2rgb({(double)long_press, 1.0, brightness})));
+        case 1: // single color (variable color)
+            if (is_dirty) paint( RGB2Color(hsv2rgb({(double)long_press, saturation, brightness})));
             break;
-        case 2:
+        case 2: // rotating rainbow (variable speed)
             uint16_t i;
             for(i=0; i< strip.numPixels(); i++) {
                 strip.setPixelColor(i,
-                        RGB2Color(hsv2rgb({fmod(i*360.0 / strip.numPixels() + dt, 360.0), 1.0, brightness}))
+                        RGB2Color(hsv2rgb({fmod(i*360.0 / strip.numPixels() + dt, 360.0), saturation, brightness}))
                         );
             }
             strip.show();
             break;
-        case 3:
-            colorWipe( RGB2Color(hsv2rgb({dt, 1.0, brightness})));
+        case 3: // ever changing color (variable speed)
+            paint( RGB2Color(hsv2rgb({dt, saturation, brightness})));
             break;
     }
 
@@ -112,6 +106,9 @@ void loop() {
                 switch(loop_mode) {
                     case 1:
                         brightness = MAX(1/255.0, previous_long_press/MAX_PRESSTIME);
+                        break;
+                    case 2:
+                        hue = long_press;
                         break;
                     default:
                         break;
