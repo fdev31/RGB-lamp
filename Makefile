@@ -2,7 +2,7 @@
 
 SRC=$(wildcard src/*.*)
 
-all: ${SRC}
+all: ${SRC} platformio.ini
 	platformio run
 
 up: ${SRC}
