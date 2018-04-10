@@ -22,8 +22,8 @@ Code & 3D models for a simple hand controlled RGB desktop lamp
 - 3v source
 - interrupt
 - GND
-- 1 wire (for RGB leds)
-- I2C/2 wires) (for the gesture sensor)
+- 1 wire (for RGB leds, pin13 by default)
+- I2C (SDA & SCL, for the gesture sensor)
 
 
 ## Bugs and limitations
