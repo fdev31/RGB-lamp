@@ -29,13 +29,14 @@ int previous_long_press = 0;
 unsigned long prev_time;
 
 // state machine
+unsigned long press_duration = 0;
 unsigned long last_duration = 0;
 unsigned long last_ts = 0;
 unsigned char loop_mode = 0;
 
 bool is_dirty = false;
 
-double brightness = 0.5;
+double brightness = 0.7;
 double hue = 0.0;
 double saturation = 1.0;
 
@@ -46,11 +47,11 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(12, 14, NEO_GRB + NEO_KHZ800); // 12
 #define paint(c) { for(uint16_t i=0; i<strip.numPixels(); i++) { strip.setPixelColor(i, c); } strip.show(); };
 
 void setup() {
+    strip.begin();
+    paint(DEFAULT_COLOR);
+
     Serial.begin(115200);
     WiFi.mode(WIFI_OFF);
-    strip.begin();
-    strip.show(); // Initialize all pixels to 'off'
-
     pinMode(INT_PIN, INPUT_PULLUP);
 
     if(!apds.begin()) Serial.println("failed to initialize device! Please check your wiring.");
@@ -61,20 +62,22 @@ void setup() {
     apds.setProximityInterruptThreshold(0, PRESS_FORCE/4);
     apds.enableProximityInterrupt();
 
-    paint(DEFAULT_COLOR);
     Serial.println("Hello Anna!!");
 }
 
 
 void loop() {
-    double dt = fmod((millis()/(1000.0/(long_press+1))), 360.0);
+    double dt = fmod((millis()/(1000.0/((long_press/10.0)+1))), 360.0);
 
     switch(loop_mode) {
         case 0: // white light (variable intensity)
-            if (is_dirty) paint(RGB2Color(hsv2rgb({0, 0, long_press/MAX_PRESSTIME})));
+            if (is_dirty) paint(RGB2Color(hsv2rgb({0, 0, long_press?long_press/MAX_PRESSTIME:brightness})));
             break;
         case 1: // single color (variable color)
-            if (is_dirty) paint( RGB2Color(hsv2rgb({(double)long_press, saturation, brightness})));
+            if (is_dirty) { paint( RGB2Color(hsv2rgb({
+                            (double) keypress?fmod(press_duration/30.0,360.0):hue,
+                            saturation, brightness})));
+            }
             break;
         case 2: // rotating rainbow (variable speed)
             uint16_t i;
@@ -103,19 +106,23 @@ void loop() {
                 loop_mode = (loop_mode+1)%NB_MODES;
 
                 // Handle state transition HERE
-                switch(loop_mode) {
-                    case 1:
-                        brightness = MAX(1/255.0, previous_long_press/MAX_PRESSTIME);
-                        break;
-                    case 2:
-                        hue = long_press;
-                        break;
-                    default:
-                        break;
-                }
+                if (previous_long_press && previous_long_press > 0.5)
+                    switch(loop_mode) {
+                        case 1:
+                            brightness = MAX(1/255.0, previous_long_press/MAX_PRESSTIME);
+                            break;
+                        case 2:
+                            hue = fmod(press_duration/29.0,360.0);
+                            break;
+
+                        default:
+                            break;
+                    }
+                Serial.println("Keypress");
                 long_press = 0;
                 last_ts = 0;
                 last_duration = 0;
+                previous_long_press = 0;
                 is_dirty = true;
                 return;
             }
@@ -124,13 +131,16 @@ void loop() {
             if (is_release && keypress != 0) {
                 // RELEASE
                 last_ts = this_time;
+                long_press = 0;
                 last_duration = this_time - keypress;
                 Serial.print("Duration ");
                 Serial.println(last_duration/1000.0);
                 keypress = 0;
             } else {
                 // PRESS
+                Serial.println("press press press");
                 long_press = MIN(MAX_PRESSTIME, (int)(((float)(this_time - keypress)*(this_time-keypress))/PRESS_SLOWDOWN));
+                press_duration = this_time - keypress;
                 if(long_press) {
                     previous_long_press = long_press;
                     is_dirty = true;
