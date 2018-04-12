@@ -1,9 +1,6 @@
 #include "Adafruit_APDS9960.h"
 #include <ESP8266WiFi.h>
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
-#include <avr/power.h>
-#endif
 
 #include "hsv.h"
 
@@ -21,21 +18,20 @@
 #define RGB2Color(rgb) strip.Color(rgb.b*255, rgb.r*255, rgb.g*255)
 
 // key handling
-unsigned long keypress = 0;
-int long_press = 0;
-int previous_long_press = 0;
-
-// time
-unsigned long prev_time;
+unsigned long keypress = 0; // is user currently interacting ? (duration)
+int long_press = 0; // magic press-duration related value
+int previous_long_press = 0; // previous duration of the long press
 
 // state machine
-unsigned long press_duration = 0;
-unsigned long last_duration = 0;
-unsigned long last_ts = 0;
-unsigned char loop_mode = 0;
+unsigned long press_duration = 0; // current keypress duration
+unsigned long last_duration = 0; // previous keypress event duration
+unsigned long last_ts = 0; // timestamp of previous press event
 
-bool is_dirty = false;
+unsigned char loop_mode = 0; // current mode to display
 
+bool is_dirty = false; // should the display be updated ? (for non animated modes)
+
+// lamp configuration
 double brightness = 0.7;
 double hue = 0.0;
 double saturation = 1.0;
@@ -65,9 +61,10 @@ void setup() {
     Serial.println("Hello Anna!!");
 }
 
-
 void loop() {
-    double dt = fmod((millis()/(1000.0/((long_press/10.0)+1))), 360.0);
+    double dt = (keypress? \
+        fmod(((press_duration/10*press_duration/10)/1000.0), 360.0) : \
+        fmod((millis()/(1000.0/((last_duration/100.0)+1.0))), 360.0) );
 
     switch(loop_mode) {
         case 0: // white light (variable intensity)
@@ -75,7 +72,7 @@ void loop() {
             break;
         case 1: // single color (variable color)
             if (is_dirty) { paint( RGB2Color(hsv2rgb({
-                            (double) keypress?fmod(press_duration/30.0,360.0):hue,
+                            (double) long_press?fmod(press_duration/30.0, 360.0):hue,
                             saturation, brightness})));
             }
             break;
@@ -93,62 +90,59 @@ void loop() {
             break;
     }
 
-    is_dirty = false; // reset value before testing
     if(!digitalRead(INT_PIN)) {
-        unsigned long this_time = millis();
-        unsigned char cur = apds.readProximity();
+        unsigned long this_time = millis(); // current timestamp
+        unsigned char cur = apds.readProximity(); // current proximity value
+        // try to detect current user action (to be filtered)
         unsigned char is_pressed = cur > PRESS_FORCE;
         unsigned char is_release = cur < PRESS_FORCE;
+
+        is_dirty = true; // if user interacted the display is probably dirty
 
         if (keypress == 0 && is_pressed) {
             if (this_time - last_ts < 300 && last_duration < 100) {
                 // DOUBLE CLICK
                 loop_mode = (loop_mode+1)%NB_MODES;
 
-                // Handle state transition HERE
-                if (previous_long_press && previous_long_press > 0.5)
-                    switch(loop_mode) {
-                        case 1:
-                            brightness = MAX(1/255.0, previous_long_press/MAX_PRESSTIME);
-                            break;
-                        case 2:
-                            hue = fmod(press_duration/29.0,360.0);
-                            break;
-
-                        default:
-                            break;
-                    }
-                Serial.println("Keypress");
                 long_press = 0;
                 last_ts = 0;
                 last_duration = 0;
                 previous_long_press = 0;
-                is_dirty = true;
-                return;
             }
             keypress = this_time;
         } else if (keypress) {
             if (is_release && keypress != 0) {
                 // RELEASE
+                if (long_press) { // store settings of current mode
+                    switch(loop_mode) {
+                        case 0:
+                            brightness = MAX(1/255.0, previous_long_press/MAX_PRESSTIME);
+                            break;
+                        case 1:
+                            hue = fmod(press_duration/30.0, 360.0);
+                            break;
+                        default:
+                            break;
+                    }
+                }
                 last_ts = this_time;
                 long_press = 0;
                 last_duration = this_time - keypress;
-                Serial.print("Duration ");
-                Serial.println(last_duration/1000.0);
+                //Serial.print("Duration ");
+                //Serial.println(last_duration/1000.0);
                 keypress = 0;
             } else {
                 // PRESS
-                Serial.println("press press press");
                 long_press = MIN(MAX_PRESSTIME, (int)(((float)(this_time - keypress)*(this_time-keypress))/PRESS_SLOWDOWN));
                 press_duration = this_time - keypress;
                 if(long_press) {
                     previous_long_press = long_press;
-                    is_dirty = true;
                 }
             }
         }
         //Serial.println(apds.readGesture());
         apds.clearInterrupt();
-        prev_time = this_time;
+    } else {
+        is_dirty = false; // reset value before testing
     }
 }
