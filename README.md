@@ -2,6 +2,8 @@
 
 Code & 3D models for a simple hand controlled RGB desktop lamp
 
+Demo here: https://youtu.be/k0g8ce4BeVI
+
 ## Lamp made from
 
 - 12 Bits WS2812B RGB LED ring (Adafruit-like)
