@@ -2,7 +2,7 @@
 
 Code & 3D models for a simple hand controlled RGB desktop lamp
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/k0g8ce4BeVI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+[![Demo video](https://img.youtube.com/vi/k0g8ce4BeVI/0.jpg)](https://www.youtube.com/watch?v=k0g8ce4BeVI)
 
 ## Lamp made from
 
