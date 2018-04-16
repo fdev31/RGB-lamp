@@ -39,8 +39,8 @@ Code & 3D models for a simple hand controlled RGB desktop lamp
 |           | 3.3V     |  VCC      |
 | TXD       | D5  (14) |           |
 |           | D6       |  INT      |
-|           | TX (D1)  |  SCL      |
-|           | RX (D2)  |  SDA      |
+|           | D1 / TX    |  SCL      |
+|           | D2 / RX    |  SDA      |
 
 ## Upload the code
 
