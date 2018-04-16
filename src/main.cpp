@@ -5,144 +5,193 @@
 #include "hsv.h"
 
 //the pin that the interrupt is attached to
-#define INT_PIN 12 // FOR THE RECEIVER
+#define WELCOME_STRING "Hello Anna!!"
+#define PROXIMITY_INTERRUPT_PIN 12 // FOR THE RECEIVER
+#define LED_RING_PIN 14 // FOR X RING CONTROL
 #define NB_MODES 4
+#define NB_LEDS 12
 
-#define PRESS_FORCE 15 // replace with 30 or 100 if too sensitive
+#define PRESS_FORCE 15 // HIGHER == less sensitive
 #define PRESS_SLOWDOWN 100000.0
 #define MAX_PRESSTIME 360.0
 #define DEFAULT_COLOR 0x080833
 
 #define MAX(a,b) ((a>b)?a:b)
 #define MIN(a,b) ((a<b)?a:b)
-#define RGB2Color(rgb) strip.Color(rgb.b*255, rgb.r*255, rgb.g*255)
 
-// key handling
-unsigned long keypress = 0; // is user currently interacting ? (duration)
-int long_press = 0; // magic press-duration related value
-int previous_long_press = 0; // previous duration of the long press
+#define RGB2Color(rgb) strip.Color(rgb.b*255, rgb.r*255, rgb.g*255) // LED=BGR format
+
+struct ProximityInputState {
+    // key handling
+    unsigned long keypress = 0; // is user currently interacting ? (running timestamp)
+
+    int long_press = 0; // "magic formula" press-duration related value
+    int previous_long_press = 0; // previous value, not reset on release
+
+    unsigned long press_duration = 0; // current keypress duration, updated during press
+    unsigned long last_duration = 0; // previous keypress event duration, updated on release
+
+    // for double click detection
+    unsigned long last_ts = 0; // timestamp of previous press event
+} inp; // input
+
+#define DBLCLICK_PREV_DURATION 300
+#define DBLCLICK_PREV_INTERVAL 100
+
+void INT_ProximityHandler(void); // see at the end of the file for input handling
 
 // state machine
-unsigned long press_duration = 0; // current keypress duration
-unsigned long last_duration = 0; // previous keypress event duration
-unsigned long last_ts = 0; // timestamp of previous press event
-
 unsigned char loop_mode = 0; // current mode to display
 
-bool is_dirty = false; // should the display be updated ? (for non animated modes)
-
 // lamp configuration
-double brightness = 0.7;
-double hue = 0.0;
-double saturation = 1.0;
+
+struct LampSettings {
+    double brightness;
+    double hue;
+    double saturation;
+    bool is_dirty; // should the display be updated ? (for non animated modes)
+} lamp_settings = {0.7, 0.0, 1.0, false}; // XXX: hue=[0-360.0], others=[0-1.0]
 
 // breakboards objects
 Adafruit_APDS9960 apds;
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(12, 14, NEO_GRB + NEO_KHZ800); // 12 leds, pin 13
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NB_LEDS, LED_RING_PIN, NEO_GRB + NEO_KHZ800);
 
-#define paint(c) { for(uint16_t i=0; i<strip.numPixels(); i++) { strip.setPixelColor(i, c); } strip.show(); };
-
-void setup() {
-    strip.begin();
-    paint(DEFAULT_COLOR);
-
-    Serial.begin(115200);
-    WiFi.mode(WIFI_OFF);
-    pinMode(INT_PIN, INPUT_PULLUP);
-
-    if(!apds.begin()) Serial.println("failed to initialize device! Please check your wiring.");
-    else Serial.println("Device initialized!");
-
-    //apds.enableGesture(true);
-    apds.enableProximity(true);
-    apds.setProximityInterruptThreshold(0, PRESS_FORCE/4);
-    apds.enableProximityInterrupt();
-
-    Serial.println("Hello Anna!!");
-}
+#define paint(c) { \
+    for(uint16_t i=0; i<NB_LEDS; i++) { \
+        strip.setPixelColor(i, c); \
+    } \
+    strip.show(); \
+};
 
 void loop() {
-    double dt = (keypress? \
-        fmod(((press_duration/10*press_duration/10)/1000.0), 360.0) : \
-        fmod((millis()/(1000.0/((last_duration/100.0)+1.0))), 360.0) );
+    // set dt relative to keypress or to miliseconds counter instead
+    double dt = (inp.keypress? \
+        fmod(((inp.press_duration/10*inp.press_duration/10)/1000.0), 360.0) : \
+        fmod((millis()/(1000.0/((inp.last_duration/100.0)+1.0))), 360.0) );
 
     switch(loop_mode) {
         case 0: // white light (variable intensity)
-            if (is_dirty) paint(RGB2Color(hsv2rgb({0, 0, long_press?long_press/MAX_PRESSTIME:brightness})));
+            if (lamp_settings.is_dirty) paint(RGB2Color(hsv2rgb({0, 0, inp.long_press?inp.long_press/MAX_PRESSTIME:lamp_settings.brightness})));
             break;
         case 1: // single color (variable color)
-            if (is_dirty) { paint( RGB2Color(hsv2rgb({
-                            (double) long_press?fmod(press_duration/30.0, 360.0):hue,
-                            saturation, brightness})));
+            if (lamp_settings.is_dirty) { paint( RGB2Color(hsv2rgb({
+                            (double) inp.long_press?fmod(inp.press_duration/30.0, 360.0):lamp_settings.hue,
+                            lamp_settings.saturation, lamp_settings.brightness})));
             }
             break;
         case 2: // rotating rainbow (variable speed)
             uint16_t i;
-            for(i=0; i< strip.numPixels(); i++) {
+            for(i=0; i< NB_LEDS; i++) {
                 strip.setPixelColor(i,
-                        RGB2Color(hsv2rgb({fmod(i*360.0 / strip.numPixels() + dt, 360.0), saturation, brightness}))
+                        RGB2Color(hsv2rgb({fmod(i*360.0 / NB_LEDS + dt, 360.0), lamp_settings.saturation, lamp_settings.brightness}))
                         );
             }
             strip.show();
             break;
         case 3: // ever changing color (variable speed)
-            paint( RGB2Color(hsv2rgb({dt, saturation, brightness})));
+            paint( RGB2Color(hsv2rgb({dt, lamp_settings.saturation, lamp_settings.brightness})));
             break;
     }
 
-    if(!digitalRead(INT_PIN)) {
-        unsigned long this_time = millis(); // current timestamp
-        unsigned char cur = apds.readProximity(); // current proximity value
-        // try to detect current user action (to be filtered)
-        unsigned char is_pressed = cur > PRESS_FORCE;
-        unsigned char is_release = cur < PRESS_FORCE;
-
-        is_dirty = true; // if user interacted the display is probably dirty
-
-        if (keypress == 0 && is_pressed) {
-            if (this_time - last_ts < 300 && last_duration < 100) {
-                // DOUBLE CLICK
-                loop_mode = (loop_mode+1)%NB_MODES;
-
-                long_press = 0;
-                last_ts = 0;
-                last_duration = 0;
-                previous_long_press = 0;
-            }
-            keypress = this_time;
-        } else if (keypress) {
-            if (is_release && keypress != 0) {
-                // RELEASE
-                if (long_press) { // store settings of current mode
-                    switch(loop_mode) {
-                        case 0:
-                            brightness = MAX(1/255.0, previous_long_press/MAX_PRESSTIME);
-                            break;
-                        case 1:
-                            hue = fmod(press_duration/30.0, 360.0);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-                last_ts = this_time;
-                long_press = 0;
-                last_duration = this_time - keypress;
-                //Serial.print("Duration ");
-                //Serial.println(last_duration/1000.0);
-                keypress = 0;
-            } else {
-                // PRESS
-                long_press = MIN(MAX_PRESSTIME, (int)(((float)(this_time - keypress)*(this_time-keypress))/PRESS_SLOWDOWN));
-                press_duration = this_time - keypress;
-                if(long_press) {
-                    previous_long_press = long_press;
-                }
-            }
-        }
-        //Serial.println(apds.readGesture());
-        apds.clearInterrupt();
+    if(!digitalRead(PROXIMITY_INTERRUPT_PIN)) {
+        INT_ProximityHandler();
+        lamp_settings.is_dirty = true; // if user interacted the display is probably dirty
     } else {
-        is_dirty = false; // reset value before testing
+        lamp_settings.is_dirty = false; // reset value before testing
     }
+}
+
+
+void setup() {
+    // init devices
+
+    // 12 leds, pin 14
+    strip.begin();
+    paint(DEFAULT_COLOR);
+
+    Serial.begin(115200);
+    WiFi.mode(WIFI_OFF);
+
+    pinMode(PROXIMITY_INTERRUPT_PIN, INPUT_PULLUP);
+
+    if(!apds.begin()) Serial.println("failed to initialize device! Please check your wiring.");
+    else Serial.println("Device initialized!");
+
+    apds.enableGesture(false);
+    apds.enableColor(false);
+    apds.enableProximity(true);
+
+    apds.setProximityInterruptThreshold(0, PRESS_FORCE/4);
+    apds.enableProximityInterrupt();
+
+    Serial.println(WELCOME_STRING);
+}
+
+void on_double_click(unsigned long this_time) {
+    loop_mode = (loop_mode+1)%NB_MODES;
+
+    inp.long_press = 0;
+    inp.last_ts = 0;
+    inp.last_duration = 0;
+    inp.previous_long_press = 0;
+}
+
+void on_release(unsigned long this_time) {
+    if (inp.long_press) { // store settings of current mode
+        switch(loop_mode) {
+            case 0:
+                lamp_settings.brightness = MAX(1/255.0, inp.previous_long_press/MAX_PRESSTIME);
+                break;
+            case 1:
+                lamp_settings.hue = fmod(inp.press_duration/30.0, 360.0);
+                break;
+            default:
+                break;
+        }
+    }
+    inp.last_ts = this_time;
+    inp.long_press = 0;
+    inp.last_duration = this_time - inp.keypress;
+    inp.keypress = 0;
+    //Serial.print("Duration ");
+    //Serial.println(inp.last_duration/1000.0);
+}
+
+
+void on_press(unsigned long this_time) {
+    // long_press is an exponential value
+    // used to set light level
+    inp.long_press = MIN(MAX_PRESSTIME, (int)(pow((float)(this_time - inp.keypress), 2)/PRESS_SLOWDOWN));
+    inp.press_duration = this_time - inp.keypress;
+    if(inp.long_press) inp.previous_long_press = inp.long_press;
+}
+
+
+void on_idle(unsigned long ts) {
+    // TODO reset some states in case some delay is over and RELEASE didn't happen
+}
+
+
+void INT_ProximityHandler(void) {
+    unsigned long this_time = millis(); // current timestamp
+
+    unsigned char cur = apds.readProximity(); // current proximity value
+    unsigned char is_pressed = cur > PRESS_FORCE;
+    unsigned char is_release = cur < PRESS_FORCE;
+
+    if (inp.keypress == 0 && is_pressed) { // new entrance after a release
+        inp.keypress = this_time;
+        if (this_time - inp.last_ts < DBLCLICK_PREV_DURATION && inp.last_duration < DBLCLICK_PREV_INTERVAL) {
+            on_double_click(this_time);
+        }
+    } else if (inp.keypress) {
+        if (is_release) {
+            on_release(this_time);
+        } else {
+            on_press(this_time);
+        }
+    } else {
+        on_idle(this_time);
+    }
+    apds.clearInterrupt();
 }
