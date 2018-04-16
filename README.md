@@ -29,6 +29,12 @@ Demo here: https://youtu.be/k0g8ce4BeVI
     - SDA
     - SCL
 
+## Upload the code
+
+You will need platformio
+
+    pio update
+    make up
 
 ## Bugs and limitations
 
