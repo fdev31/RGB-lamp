@@ -38,11 +38,9 @@ Demo here: https://youtu.be/k0g8ce4BeVI
 | 5V        | 5V       |           |
 |           | 3.3V     |  VCC      |
 | TXD       | D5  (14) |           |
-|           | D1       |           |
-|           | D2       |           |
 |           | D6       |  INT      |
-|           | TX       |  SCL      |
-|           | RX       |  SDA      |
+|           | TX (D1)  |  SCL      |
+|           | RX (D2)  |  SDA      |
 
 ## Upload the code
 
