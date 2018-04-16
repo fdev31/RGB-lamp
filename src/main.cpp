@@ -26,8 +26,6 @@ enum Modes {
 #define MAX(a,b) ((a>b)?a:b)
 #define MIN(a,b) ((a<b)?a:b)
 
-#define RGB2Color(rgb) strip.Color(rgb.b*255, rgb.r*255, rgb.g*255) // LED=BGR format
-
 struct ProximityInputState {
     // key handling
     unsigned long keypress = 0; // is user currently interacting ? (running timestamp)
@@ -73,6 +71,11 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NB_LEDS, LED_RING_PIN, NEO_GRB + NEO
 #define CALC_HUE fmod(inp.press_duration/30.0, 360.0)
 #define CALC_INT inp.long_press/MAX_PRESSTIME
 
+uint32_t HSV(hsv col) {
+    rgb c = hsv2rgb(col);
+    return strip.Color(c.b*255, c.r*255, c.g*255) ;
+}; // LED=BGR format
+
 
 void loop() {
     // set dt relative to keypress or to miliseconds counter instead
@@ -82,25 +85,25 @@ void loop() {
 
     switch(loop_mode) {
         case MODE_WHITE: // white light (variable intensity)
-            if (lamp_settings.is_dirty) paint(RGB2Color(hsv2rgb({0, 0, inp.long_press?CALC_INT:lamp_settings.brightness})));
+            if (lamp_settings.is_dirty) paint(HSV({0, 0, inp.long_press?CALC_INT:lamp_settings.brightness}));
             break;
         case MODE_STILL: // single color (variable color)
-            if (lamp_settings.is_dirty) { paint( RGB2Color(hsv2rgb({
+            if (lamp_settings.is_dirty) { paint( HSV({
                             (double) inp.long_press?CALC_HUE:lamp_settings.hue,
-                            lamp_settings.saturation, lamp_settings.brightness})));
+                            lamp_settings.saturation, lamp_settings.brightness}));
             }
             break;
         case MODE_RAINBOW: // rotating rainbow (variable speed)
             uint16_t i;
             for(i=0; i< NB_LEDS; i++) {
                 strip.setPixelColor(i,
-                        RGB2Color(hsv2rgb({fmod(i*360.0 / NB_LEDS + dt, 360.0), lamp_settings.saturation, lamp_settings.brightness}))
+                        HSV({fmod(i*360.0 / NB_LEDS + dt, 360.0), lamp_settings.saturation, lamp_settings.brightness})
                         );
             }
             strip.show();
             break;
         case MODE_COLOR: // ever changing color (variable speed)
-            paint( RGB2Color(hsv2rgb({dt, lamp_settings.saturation, lamp_settings.brightness})));
+            paint( HSV({dt, lamp_settings.saturation, lamp_settings.brightness}));
             break;
     }
 
@@ -173,7 +176,7 @@ void on_press(unsigned long this_time) {
     if(inp.long_press) inp.previous_long_press = inp.long_press;
 }
 
-void on_idle(unsigned long ts) {
+void on_idle(unsigned long this_time) {
     // TODO reset some states in case some delay is over and RELEASE didn't happen
 }
 
