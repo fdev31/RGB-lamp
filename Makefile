@@ -7,3 +7,6 @@ all: ${SRC} platformio.ini
 
 up: ${SRC}
 	platformio run --target=upload
+
+mon:
+	platformio run --target=monitor
