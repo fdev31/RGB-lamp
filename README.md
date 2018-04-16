@@ -16,7 +16,7 @@ Code & 3D models for a simple hand controlled RGB desktop lamp
 - ~ 10 small wires
     - soldering iron + tin
 - Wemos D1 mini (default platformio.ini config)
-    - or any Arduino compatible microcontroller with 5v pin
+    - or any Arduino compatible microcontroller with 5v, 3.3v & interrupt pin available
 
 ## Needed pins
 
