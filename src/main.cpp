@@ -8,8 +8,15 @@
 #define WELCOME_STRING "Hello Anna!!"
 #define PROXIMITY_INTERRUPT_PIN 12 // FOR THE RECEIVER
 #define LED_RING_PIN 14 // FOR X RING CONTROL
-#define NB_MODES 4
 #define NB_LEDS 12
+
+enum Modes {
+    MODE_WHITE,
+    MODE_STILL,
+    MODE_RAINBOW,
+    MODE_COLOR,
+    NB_MODES
+};
 
 #define PRESS_FORCE 15 // HIGHER == less sensitive
 #define PRESS_SLOWDOWN 100000.0
@@ -63,23 +70,27 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NB_LEDS, LED_RING_PIN, NEO_GRB + NEO
     strip.show(); \
 };
 
+#define CALC_HUE fmod(inp.press_duration/30.0, 360.0)
+#define CALC_INT inp.long_press/MAX_PRESSTIME
+
+
 void loop() {
     // set dt relative to keypress or to miliseconds counter instead
     double dt = (inp.keypress? \
-        fmod(((inp.press_duration/10*inp.press_duration/10)/1000.0), 360.0) : \
+        fmod((pow(inp.press_duration/10, 2)/1000.0), 360.0) : \
         fmod((millis()/(1000.0/((inp.last_duration/100.0)+1.0))), 360.0) );
 
     switch(loop_mode) {
-        case 0: // white light (variable intensity)
-            if (lamp_settings.is_dirty) paint(RGB2Color(hsv2rgb({0, 0, inp.long_press?inp.long_press/MAX_PRESSTIME:lamp_settings.brightness})));
+        case MODE_WHITE: // white light (variable intensity)
+            if (lamp_settings.is_dirty) paint(RGB2Color(hsv2rgb({0, 0, inp.long_press?CALC_INT:lamp_settings.brightness})));
             break;
-        case 1: // single color (variable color)
+        case MODE_STILL: // single color (variable color)
             if (lamp_settings.is_dirty) { paint( RGB2Color(hsv2rgb({
-                            (double) inp.long_press?fmod(inp.press_duration/30.0, 360.0):lamp_settings.hue,
+                            (double) inp.long_press?CALC_HUE:lamp_settings.hue,
                             lamp_settings.saturation, lamp_settings.brightness})));
             }
             break;
-        case 2: // rotating rainbow (variable speed)
+        case MODE_RAINBOW: // rotating rainbow (variable speed)
             uint16_t i;
             for(i=0; i< NB_LEDS; i++) {
                 strip.setPixelColor(i,
@@ -88,7 +99,7 @@ void loop() {
             }
             strip.show();
             break;
-        case 3: // ever changing color (variable speed)
+        case MODE_COLOR: // ever changing color (variable speed)
             paint( RGB2Color(hsv2rgb({dt, lamp_settings.saturation, lamp_settings.brightness})));
             break;
     }
@@ -100,7 +111,6 @@ void loop() {
         lamp_settings.is_dirty = false; // reset value before testing
     }
 }
-
 
 void setup() {
     // init devices
@@ -139,24 +149,21 @@ void on_double_click(unsigned long this_time) {
 void on_release(unsigned long this_time) {
     if (inp.long_press) { // store settings of current mode
         switch(loop_mode) {
-            case 0:
-                lamp_settings.brightness = MAX(1/255.0, inp.previous_long_press/MAX_PRESSTIME);
+            case MODE_WHITE:
+                lamp_settings.brightness = MAX(0.004, CALC_INT);
                 break;
-            case 1:
-                lamp_settings.hue = fmod(inp.press_duration/30.0, 360.0);
+            case MODE_STILL:
+                lamp_settings.hue = CALC_HUE;
                 break;
             default:
                 break;
         }
     }
     inp.last_ts = this_time;
-    inp.long_press = 0;
     inp.last_duration = this_time - inp.keypress;
     inp.keypress = 0;
-    //Serial.print("Duration ");
-    //Serial.println(inp.last_duration/1000.0);
+    inp.long_press = 0;
 }
-
 
 void on_press(unsigned long this_time) {
     // long_press is an exponential value
@@ -166,11 +173,9 @@ void on_press(unsigned long this_time) {
     if(inp.long_press) inp.previous_long_press = inp.long_press;
 }
 
-
 void on_idle(unsigned long ts) {
     // TODO reset some states in case some delay is over and RELEASE didn't happen
 }
-
 
 void INT_ProximityHandler(void) {
     unsigned long this_time = millis(); // current timestamp
