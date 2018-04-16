@@ -15,23 +15,12 @@ Code & 3D models for a simple hand controlled RGB desktop lamp
     - .blend & .stl provided
 - ~ 10 small wires
     - soldering iron + tin
-- A micro controller (tested with Wemos D1 & D1 mini)
+- Some micro controller (tested with Wemos D1 & D1 mini)
     - 5v
     - 3.3v
     - I2C
     - 1 free interrupt pin
     - 1 PWM / 1 wire capable pin
-
-## Needed pins
-
-- 5v source
-- 3v source
-- interrupt
-- GND
-- 1 wire (for RGB leds, pin 14 by default)
-- I2C (for the gesture sensor)
-    - SDA
-    - SCL
 
 ## Pinout
 
