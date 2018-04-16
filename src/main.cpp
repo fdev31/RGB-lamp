@@ -26,8 +26,8 @@ enum Modes {
 #define MAX(a,b) ((a>b)?a:b)
 #define MIN(a,b) ((a<b)?a:b)
 
+// Input handling
 struct ProximityInputState {
-    // key handling
     unsigned long keypress = 0; // is user currently interacting ? (running timestamp)
 
     int long_press = 0; // "magic formula" press-duration related value
@@ -36,9 +36,8 @@ struct ProximityInputState {
     unsigned long press_duration = 0; // current keypress duration, updated during press
     unsigned long last_duration = 0; // previous keypress event duration, updated on release
 
-    // for double click detection
     unsigned long last_ts = 0; // timestamp of previous press event
-} inp; // input
+} inp;
 
 #define DBLCLICK_PREV_DURATION 300
 #define DBLCLICK_PREV_INTERVAL 100
@@ -46,7 +45,7 @@ struct ProximityInputState {
 void INT_ProximityHandler(void); // see at the end of the file for input handling
 
 // state machine
-unsigned char loop_mode = 0; // current mode to display
+unsigned char loop_mode = MODE_WHITE; // current mode to display
 
 // lamp configuration
 
@@ -61,6 +60,7 @@ struct LampSettings {
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NB_LEDS, LED_RING_PIN, NEO_GRB + NEO_KHZ800);
 
+// quick shortcut function to draw all pixels
 #define paint(c) { \
     for(uint16_t i=0; i<NB_LEDS; i++) { \
         strip.setPixelColor(i, c); \
@@ -68,10 +68,13 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NB_LEDS, LED_RING_PIN, NEO_GRB + NEO
     strip.show(); \
 };
 
+// HUE & HINT computed relative to current "press" event
 #define CALC_HUE fmod(inp.press_duration/30.0, 360.0)
 #define CALC_INT inp.long_press/MAX_PRESSTIME
 
 uint32_t HSV(hsv col) {
+    // takes HSV struct & return color suitable for strip
+
     rgb c = hsv2rgb(col);
     return strip.Color(c.b*255, c.r*255, c.g*255) ;
 }; // LED=BGR format
@@ -87,7 +90,7 @@ void loop() {
         case MODE_WHITE: // white light (variable intensity)
             if (lamp_settings.is_dirty) paint(HSV({0, 0, inp.long_press?CALC_INT:lamp_settings.brightness}));
             break;
-        case MODE_STILL: // single color (variable color)
+        case MODE_STILL: // static color (variable color)
             if (lamp_settings.is_dirty) { paint( HSV({
                             (double) inp.long_press?CALC_HUE:lamp_settings.hue,
                             lamp_settings.saturation, lamp_settings.brightness}));
@@ -111,14 +114,13 @@ void loop() {
         INT_ProximityHandler();
         lamp_settings.is_dirty = true; // if user interacted the display is probably dirty
     } else {
-        lamp_settings.is_dirty = false; // reset value before testing
+        lamp_settings.is_dirty = false;
     }
 }
 
 void setup() {
     // init devices
 
-    // 12 leds, pin 14
     strip.begin();
     paint(DEFAULT_COLOR);
 
