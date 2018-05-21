@@ -6,7 +6,7 @@
 
 //the pin that the interrupt is attached to
 #define WELCOME_STRING "Hello Anna!!"
-#define PROXIMITY_INTERRUPT_PIN 12 // FOR THE RECEIVER
+#define PROXIMITY_INTERRUPT_PIN 12 // FOR THE RECEIVER, set to 0 to disable interrupt pin
 #define LED_RING_PIN 14 // FOR X RING CONTROL
 #define NB_LEDS 12
 
@@ -110,11 +110,20 @@ void loop() {
             break;
     }
 
-    if(!digitalRead(PROXIMITY_INTERRUPT_PIN)) {
-        INT_ProximityHandler();
-        lamp_settings.is_dirty = true; // if user interacted the display is probably dirty
+    if(PROXIMITY_INTERRUPT_PIN) {
+        if(!digitalRead(PROXIMITY_INTERRUPT_PIN)) {
+            INT_ProximityHandler();
+            lamp_settings.is_dirty = true; // if user interacted the display is probably dirty
+        } else {
+            lamp_settings.is_dirty = false;
+        }
     } else {
-        lamp_settings.is_dirty = false;
+        if(apds.readProximity() > PRESS_FORCE / 4) {
+            INT_ProximityHandler();
+            lamp_settings.is_dirty = true;
+        } else {
+            lamp_settings.is_dirty = false;
+        }
     }
 }
 
